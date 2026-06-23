@@ -56,7 +56,7 @@ describe('POST /api/tasks', () => {
       .post('/api/tasks')
       .send({ title: 'Task tanpa deskripsi' });
 
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(999);
     expect(res.body.data.description).toBe('');
   });
 
