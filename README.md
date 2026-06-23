@@ -1,5 +1,5 @@
 Kelompok: EVOS <br>
-Matkul: Manajemen Konfigurasi dan Evolusi Perangkat Lunak
+Matkul: Manajemen Konfigurasi dan Evolusi Perangkat Lunak <br>
 Anggota:
 1. Muhammad Fathi Rafa (2311104022)
 2. Muhammad Mahrus Ali (2311104006)
