@@ -1,5 +1,5 @@
 # ─── Stage 1: Base ───────────────────────────────────────
-FROM node:999-alpine AS base
+FROM node:0000-alpine AS base
 
 WORKDIR /app
 
