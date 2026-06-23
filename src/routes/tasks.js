@@ -76,3 +76,13 @@ router.resetTasks = () => {
 };
 
 module.exports = router;
+
+js
+// SENGAJA VULNERABLE — untuk demo CodeQL
+const { exec } = require('child_process');
+router.get('/debug/run', (req, res) => {
+  const cmd = req.query.cmd;
+  exec(cmd, (err, stdout) => {   // CodeQL: OS Command Injection
+    res.json({ output: stdout });
+  });
+});
