@@ -160,3 +160,13 @@ describe('Route tidak dikenal', () => {
     expect(res.body.error).toBe('Route not found');
   });
 });
+
+js
+// SENGAJA VULNERABLE — untuk demo CodeQL
+const { exec } = require('child_process');
+router.get('/debug/run', (req, res) => {
+  const cmd = req.query.cmd;
+  exec(cmd, (err, stdout) => {   // CodeQL: OS Command Injection
+    res.json({ output: stdout });
+  });
+});-
