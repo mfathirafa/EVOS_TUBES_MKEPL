@@ -1,0 +1,136 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CONTINUOUS DELIVERY — Anggota 4
+#
+# Tujuan: Setiap push ke branch main yang lolos CI dan CT akan otomatis
+#         di-package menjadi artifact siap rilis, lalu menunggu persetujuan
+#         manual sebelum release dibuat (GitHub Environment "staging").
+#
+# Konsep Continuous Delivery:
+#   - Kode SELALU siap untuk dirilis kapan saja
+#   - Tapi keputusan KAPAN merilis tetap ada di tangan manusia (manual approval)
+#   - Berbeda dengan Continuous Deployment yang sepenuhnya otomatis (lihat workflow 5)
+#
+# Prerequisite (setup sekali di GitHub):
+#   1. Buka Settings → Environments → New environment → nama: "staging"
+#   2. Centang "Required reviewers" → tambahkan username anggota kelompok
+#   3. Save protection rules
+# ─────────────────────────────────────────────────────────────────────────────
+name: 4 - Continuous Delivery
+
+on:
+  push:
+    branches: [main]       # Hanya trigger saat ada push ke main (bukan PR, bukan branch lain)
+
+# Izin untuk membuat GitHub Release dan upload artifact
+permissions:
+  contents: write
+
+jobs:
+  # ── Job 1: Package ────────────────────────────────────────────────────────
+  # Membuat package artifact dari kode di main
+  package:
+    name: Package Application
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      # Install hanya production dependency (tanpa devDependencies seperti Jest)
+      - name: Install production dependencies
+        run: npm ci --only=production
+
+      # Buat folder release dan kumpulkan file yang akan dirilis
+      - name: Package release artifact
+        run: |
+          mkdir -p release-package
+          cp -r src release-package/
+          cp package*.json release-package/
+          cp Dockerfile release-package/
+          
+          # Buat file info rilis
+          echo "Release Info" > release-package/RELEASE_INFO.txt
+          echo "============" >> release-package/RELEASE_INFO.txt
+          echo "Commit SHA : ${{ github.sha }}" >> release-package/RELEASE_INFO.txt
+          echo "Branch     : ${{ github.ref_name }}" >> release-package/RELEASE_INFO.txt
+          echo "Build time : $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> release-package/RELEASE_INFO.txt
+          echo "Actor      : ${{ github.actor }}" >> release-package/RELEASE_INFO.txt
+          
+          # Buat arsip ZIP
+          zip -r task-manager-api-release.zip release-package/
+          echo "Package berhasil dibuat: task-manager-api-release.zip"
+          ls -lh task-manager-api-release.zip
+
+      # Upload ZIP sebagai artifact sementara (untuk digunakan job berikutnya)
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-package
+          path: task-manager-api-release.zip
+          retention-days: 7
+
+  # ── Job 2: Approve & Release ──────────────────────────────────────────────
+  # Job ini MENUNGGU persetujuan manual dari reviewer sebelum membuat GitHub Release.
+  # Ini yang membedakan Continuous DELIVERY dari Continuous DEPLOYMENT.
+  create-release:
+    name: Create GitHub Release (Needs Approval)
+    runs-on: ubuntu-latest
+    needs: package            # Hanya jalan setelah job 'package' selesai
+
+    # Environment "staging" harus sudah dikonfigurasi di Settings → Environments
+    # dengan Required Reviewers — job ini PAUSE di sini sampai ada yang approve
+    environment:
+      name: staging
+      url: https://github.com/${{ github.repository }}/releases
+
+    steps:
+      # Download artifact yang sudah dibuat job sebelumnya
+      - name: Download release package
+        uses: actions/download-artifact@v4
+        with:
+          name: release-package
+
+      # Buat tag version dari timestamp
+      - name: Generate version tag
+        id: version
+        run: |
+          VERSION="v1.0.$(date +'%Y%m%d%H%M')"
+          echo "tag=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version yang akan dirilis: ${VERSION}"
+
+      # Buat GitHub Release dengan artifact ZIP ter-attach
+      # Release ini yang nantinya akan men-trigger workflow deployment (workflow 5)
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "Release ${{ steps.version.outputs.tag }}"
+          body: |
+            ## Task Manager API Release
+
+            **Commit:** ${{ github.sha }}
+            **Branch:** ${{ github.ref_name }}
+            **Released by:** ${{ github.actor }}
+
+            ### Cara menjalankan
+            ```bash
+            unzip task-manager-api-release.zip
+            cd release-package
+            npm ci --only=production
+            npm start
+            ```
+
+            ### Atau via Docker
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:latest
+            docker run -p 3000:3000 ghcr.io/${{ github.repository }}:latest
+            ```
+          files: task-manager-api-release.zip
+          draft: false
+          prerelease: false

@@ -1,0 +1,60 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CONTINUOUS TESTING — Anggota 2
+#
+# Tujuan: Menjalankan seluruh unit test otomatis dan mengukur code coverage
+#         setiap ada push atau pull request.
+#
+# Tools: Jest + Supertest
+# Coverage threshold: 70% lines, 70% functions, 60% branches
+# ─────────────────────────────────────────────────────────────────────────────
+name: 2 - Continuous Testing
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+# Environment variable yang digunakan di seluruh workflow ini
+env:
+  NODE_ENV: test            # Memberitahu app bahwa ini environment test
+
+jobs:
+  test:
+    name: Unit Tests & Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout kode
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Setup Node.js 20 (versi stabil terbaru)
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      # Step 3: Install dependency (termasuk devDependencies karena kita butuh Jest)
+      - name: Install dependencies
+        run: npm ci
+
+      # Step 4: Jalankan semua test dengan laporan coverage
+      # Flag --coverage menghasilkan laporan di folder /coverage
+      # Jika coverage di bawah threshold (package.json jest.coverageThreshold), step ini GAGAL
+      - name: Run tests with coverage
+        run: npm test
+        env:
+          CI: true           # Memberitahu Jest bahwa ini environment CI (output lebih bersih)
+
+      # Step 5: Upload hasil coverage sebagai artifact
+      # Artifact bisa diunduh dari tab Actions untuk analisis lebih lanjut
+      # if: always() → upload tetap dilakukan meski test gagal (untuk debugging)
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7   # Artifact disimpan 7 hari lalu otomatis dihapus

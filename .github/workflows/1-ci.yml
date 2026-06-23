@@ -1,0 +1,64 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CONTINUOUS INTEGRATION — Anggota 1
+#
+# Tujuan: Memastikan kode dapat di-build dan tidak ada error syntax
+#         setiap kali ada push atau pull request.
+#
+# Strategy matrix: workflow ini menjalankan build di DUA versi Node.js
+# secara paralel (18 dan 20) agar kita tahu kode kompatibel di keduanya.
+# ─────────────────────────────────────────────────────────────────────────────
+name: 1 - Continuous Integration
+
+on:
+  push:
+    branches: ["**"]        # Semua branch saat push
+  pull_request:
+    branches: [main]        # PR yang menuju branch main
+
+jobs:
+  build:
+    name: Build · Node ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+
+    # Matrix: jalankan job ini dua kali, sekali dengan Node 18 dan sekali Node 20
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+      fail-fast: false      # Jika salah satu gagal, yang lain tetap jalan
+
+    steps:
+      # Step 1: Ambil kode dari repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Setup Node.js sesuai versi di matrix
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm           # Cache node_modules agar step berikutnya lebih cepat
+
+      # Step 3: Install semua dependency dari package-lock.json (bukan package.json)
+      # npm ci lebih strict dari npm install — cocok untuk CI environment
+      - name: Install dependencies
+        run: npm ci
+
+      # Step 4: Cek syntax seluruh file JS (tidak perlu kompilasi, Node langsung cek)
+      - name: Syntax check (node --check)
+        run: |
+          node --check src/app.js
+          node --check src/routes/tasks.js
+          echo "Semua file lolos syntax check"
+
+      # Step 5: Verifikasi module app bisa di-load tanpa error runtime
+      - name: Verify app module loads
+        run: |
+          node -e "
+            const app = require('./src/app');
+            console.log('App loaded, type:', typeof app);
+            if (typeof app !== 'function') {
+              console.error('ERROR: app bukan Express instance!');
+              process.exit(1);
+            }
+            console.log('Build verification passed');
+          "

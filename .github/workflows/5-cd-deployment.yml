@@ -1,0 +1,97 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CONTINUOUS DEPLOYMENT — Anggota 5
+#
+# Tujuan: Setelah release GitHub dipublikasikan (setelah Anggota 4 membuat release
+#         dan disetujui), workflow ini OTOMATIS build Docker image dan push ke
+#         GitHub Container Registry (GHCR) — tanpa campur tangan manusia sama sekali.
+#
+# Konsep Continuous Deployment:
+#   - Berbeda dengan Continuous Delivery (workflow 4) yang masih ada approval manual
+#   - Di sini, begitu release dipublish → deployment ke "registry" LANGSUNG terjadi
+#   - Image yang di-push siap dijalankan oleh siapa saja dengan: docker pull
+#
+# Output: Docker image tersedia di ghcr.io/<owner>/<repo>:latest
+#         dan di-tag juga dengan versi release (mis: ghcr.io/user/repo:v1.0.20240621)
+#
+# Tidak butuh secret tambahan — menggunakan GITHUB_TOKEN bawaan GitHub.
+# ─────────────────────────────────────────────────────────────────────────────
+name: 5 - Continuous Deployment
+
+on:
+  # Trigger: hanya saat sebuah GitHub Release dipublish (bukan draft)
+  # Release ini dibuat oleh workflow 4 setelah mendapat approval
+  release:
+    types: [published]
+
+# Izin yang dibutuhkan untuk push ke GitHub Container Registry
+permissions:
+  contents: read
+  packages: write            # WAJIB agar bisa push image ke GHCR
+
+env:
+  # Nama image di GHCR (contoh: ghcr.io/namauser/task-manager-api)
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/task-manager-api
+
+jobs:
+  deploy:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout kode dari tag release yang baru dipublish
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Setup Docker Buildx (builder yang lebih canggih, mendukung multi-platform)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Step 3: Login ke GitHub Container Registry (GHCR)
+      # GITHUB_TOKEN otomatis tersedia di setiap GitHub Actions — tidak perlu dibuat manual
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Step 4: Extract metadata untuk penamaan image (tag dan label)
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            # Tag "latest" selalu menunjuk ke release terbaru
+            type=raw,value=latest
+            # Tag dengan versi release (mis: v1.0.20240621)
+            type=ref,event=tag
+            # Tag dengan 7 karakter pertama SHA commit untuk traceability
+            type=sha,prefix=sha-,format=short
+
+      # Step 5: Build dan push Docker image ke GHCR
+      # cache-from dan cache-to mempercepat build dengan memanfaatkan layer cache
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true                          # true = langsung push setelah build
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha               # Ambil cache dari GitHub Actions cache
+          cache-to: type=gha,mode=max        # Simpan cache untuk build berikutnya
+
+      # Step 6: Tampilkan ringkasan deployment
+      - name: Deployment summary
+        run: |
+          echo "=================================================="
+          echo "  DEPLOYMENT BERHASIL"
+          echo "=================================================="
+          echo "  Image   : ${{ env.IMAGE_NAME }}:latest"
+          echo "  Release : ${{ github.event.release.tag_name }}"
+          echo "  Commit  : ${{ github.sha }}"
+          echo "=================================================="
+          echo ""
+          echo "Cara menjalankan image:"
+          echo "  docker pull ${{ env.IMAGE_NAME }}:latest"
+          echo "  docker run -p 3000:3000 ${{ env.IMAGE_NAME }}:latest"

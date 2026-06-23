@@ -1,0 +1,65 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CONTINUOUS INSPECTION — Anggota 3
+#
+# Tujuan: Melakukan static analysis keamanan (security scanning) secara otomatis
+#         menggunakan CodeQL — tool bawaan GitHub yang gratis untuk repo publik.
+#
+# CodeQL menganalisis kode untuk menemukan:
+#   - Injection vulnerabilities (SQL/command injection)
+#   - XSS (cross-site scripting)
+#   - Path traversal
+#   - Insecure use of cryptography
+#   - Dan puluhan pola kerentanan keamanan lainnya
+#
+# Hasil scan muncul di: Security → Code scanning alerts (tab di halaman repo)
+# ─────────────────────────────────────────────────────────────────────────────
+name: 3 - Continuous Inspection (CodeQL)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Jadwal: scan ulang setiap Senin pukul 08:00 UTC meski tidak ada push baru
+  # Berguna untuk mendeteksi CVE baru yang ditemukan setelah kode di-push
+  schedule:
+    - cron: "0 8 * * 1"
+
+# Izin yang dibutuhkan CodeQL untuk menulis hasil ke Security tab
+permissions:
+  actions: read
+  contents: read
+  security-events: write    # WAJIB agar CodeQL bisa upload hasil scan
+
+jobs:
+  analyze:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout kode dengan full history
+      # fetch-depth: 0 diperlukan CodeQL untuk analisis yang lebih akurat
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Step 2: Inisialisasi CodeQL untuk bahasa JavaScript
+      # CodeQL akan membuat "database" dari source code yang akan dianalisis
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript   # Bahasa yang dianalisis
+          # queries: security-and-quality  # Uncomment untuk analisis lebih lengkap
+
+      # Step 3: Auto-build (untuk JavaScript, tidak ada compile step)
+      # Untuk bahasa compiled (Java/C#), step ini akan menjalankan build
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      # Step 4: Jalankan analisis CodeQL
+      # Hasil dikirim ke Security → Code scanning alerts di halaman GitHub repo
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript"
