@@ -1,4 +1,4 @@
-Kelompok: EVOS
+Kelompok: EVOS <br>
 Matkul: Manajemen Konfigurasi dan Evolusi Perangkat Lunak
 Anggota:
 1. Muhammad Fathi Rafa (2311104022)
